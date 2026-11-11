@@ -1,464 +1,165 @@
 'use client';
-import { CustomerService } from '../../../../demo/service/CustomerService';
-import { ProductService } from '../../../../demo/service/ProductService';
-import { FilterMatchMode, FilterOperator } from 'primereact/api';
-import { Button } from 'primereact/button';
-import { Calendar } from 'primereact/calendar';
-import { Column, ColumnFilterApplyTemplateOptions, ColumnFilterClearTemplateOptions, ColumnFilterElementTemplateOptions } from 'primereact/column';
-import { DataTable, DataTableExpandedRows, DataTableFilterMeta } from 'primereact/datatable';
-import { Dropdown } from 'primereact/dropdown';
-import { InputNumber } from 'primereact/inputnumber';
+
+import React, { useMemo, useRef, useState } from 'react';
+import { DataTable } from 'primereact/datatable';
+import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
-import { MultiSelect } from 'primereact/multiselect';
-import { ProgressBar } from 'primereact/progressbar';
-import { Rating } from 'primereact/rating';
-import { Slider } from 'primereact/slider';
-import { ToggleButton } from 'primereact/togglebutton';
-import { TriStateCheckbox } from 'primereact/tristatecheckbox';
-import { classNames } from 'primereact/utils';
-import React, { useEffect, useState } from 'react';
-import type { Demo } from '@/types';
+import { InputNumber } from 'primereact/inputnumber';
+import { Button } from 'primereact/button';
 
-const TableDemo = () => {
-    const [customers1, setCustomers1] = useState<Demo.Customer[]>([]);
-    const [customers2, setCustomers2] = useState<Demo.Customer[]>([]);
-    const [customers3, setCustomers3] = useState<Demo.Customer[]>([]);
-    const [filters1, setFilters1] = useState<DataTableFilterMeta>({});
-    const [loading1, setLoading1] = useState(true);
-    const [loading2, setLoading2] = useState(true);
-    const [idFrozen, setIdFrozen] = useState(false);
-    const [products, setProducts] = useState<Demo.Product[]>([]);
-    const [globalFilterValue1, setGlobalFilterValue1] = useState('');
-    const [expandedRows, setExpandedRows] = useState<any[] | DataTableExpandedRows>([]);
-    const [allExpanded, setAllExpanded] = useState(false);
+/* ───────────── Tipos ───────────── */
+interface Producto {
+    id: number;
+    nombre: string;
+    cantidad: number;
+    precio: number; // precio unitario
+}
 
-    const representatives = [
-        { name: 'Amy Elsner', image: 'amyelsner.png' },
-        { name: 'Anna Fali', image: 'annafali.png' },
-        { name: 'Asiya Javayant', image: 'asiyajavayant.png' },
-        { name: 'Bernardo Dominic', image: 'bernardodominic.png' },
-        { name: 'Elwin Sharvill', image: 'elwinsharvill.png' },
-        { name: 'Ioni Bowcher', image: 'ionibowcher.png' },
-        { name: 'Ivan Magalhaes', image: 'ivanmagalhaes.png' },
-        { name: 'Onyama Limba', image: 'onyamalimba.png' },
-        { name: 'Stephen Shaw', image: 'stephenshaw.png' },
-        { name: 'XuXue Feng', image: 'xuxuefeng.png' }
-    ];
+const IVA = 0.16; // 16 %
 
-    const statuses = ['unqualified', 'qualified', 'new', 'negotiation', 'renewal', 'proposal'];
+const productosIniciales: Producto[] = [
+    { id: 1, nombre: 'Impresora LaserJet Color', cantidad: 2, precio: 5200 },
+    { id: 2, nombre: 'Monitor LED 31 plg.', cantidad: 3, precio: 1700 }
+];
 
-    const clearFilter1 = () => {
-        initFilters1();
+const moneda = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+
+/* ───────────── Componente ───────────── */
+const PuntoDeVenta = () => {
+   
+    const [productos, setProductos] = useState<Producto[]>(productosIniciales);
+    const [siguienteId, setSiguienteId] = useState(3);
+
+    // Formulario de registro
+    const [nombre, setNombre] = useState('');
+    const [cantidad, setCantidad] = useState<number | null>(null);
+    const [precio, setPrecio] = useState<number | null>(null);
+    const nombreRef = useRef<HTMLInputElement>(null);
+
+    //editar
+    const [editandoId, setEditandoId] = useState<number | null>(null);
+    const [borrador, setBorrador] = useState<Producto | null>(null);
+
+   //total actualizado
+    const { subtotal, iva, total } = useMemo(() => {
+        const sub = productos.reduce((acc, p) => acc + p.cantidad * p.precio, 0);
+        return { subtotal: sub, iva: sub * IVA, total: sub * (1 + IVA) };
+    }, [productos]);
+
+   //registrar
+    const registrar = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!nombre.trim() || !cantidad || cantidad <= 0 || !precio || precio <= 0) return;
+
+        setProductos((prev) => [...prev, { id: siguienteId, nombre: nombre.trim(), cantidad, precio }]);
+        setSiguienteId((n) => n + 1);
+        setNombre('');
+        setCantidad(null);
+        setPrecio(null);
+        nombreRef.current?.focus();
     };
 
-    const onGlobalFilterChange1 = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        let _filters1 = { ...filters1 };
-        (_filters1['global'] as any).value = value;
+    /* ── Eliminar ── */
+    const eliminar = (id: number) => setProductos((prev) => prev.filter((p) => p.id !== id));
 
-        setFilters1(_filters1);
-        setGlobalFilterValue1(value);
+    /* ── Editar / Guardar / Cancelar ── */
+    const editar = (p: Producto) => {
+        setEditandoId(p.id);
+        setBorrador({ ...p });
     };
-
-    const renderHeader1 = () => {
-        return (
-            <div className="flex justify-content-between">
-                <Button type="button" icon="pi pi-filter-slash" label="Clear" outlined onClick={clearFilter1} />
-                <span className="p-input-icon-left">
-                    <i className="pi pi-search" />
-                    <InputText value={globalFilterValue1} onChange={onGlobalFilterChange1} placeholder="Keyword Search" />
-                </span>
-            </div>
-        );
+    const cancelar = () => {
+        setEditandoId(null);
+        setBorrador(null);
     };
-
-    useEffect(() => {
-        setLoading2(true);
-
-        CustomerService.getCustomersLarge().then((data) => {
-            setCustomers1(getCustomers(data));
-            setLoading1(false);
-        });
-        CustomerService.getCustomersLarge().then((data) => {
-            setCustomers2(getCustomers(data));
-            setLoading2(false);
-        });
-        CustomerService.getCustomersMedium().then((data) => setCustomers3(data));
-        ProductService.getProductsWithOrdersSmall().then((data) => setProducts(data));
-
-        initFilters1();
-    }, []);
-
-    const balanceTemplate = (rowData: Demo.Customer) => {
-        return (
-            <div>
-                <span className="text-bold">{formatCurrency(rowData.balance as number)}</span>
-            </div>
-        );
+    const guardar = () => {
+        if (!borrador) return;
+        if (!borrador.nombre.trim() || !(borrador.cantidad > 0) || !(borrador.precio > 0)) return;
+        setProductos((prev) => prev.map((p) => (p.id === borrador.id ? { ...borrador, nombre: borrador.nombre.trim() } : p)));
+        cancelar();
     };
-
-    const getCustomers = (data: Demo.Customer[]) => {
-        return [...(data || [])].map((d) => {
-            d.date = new Date(d.date);
-            return d;
-        });
-    };
-
-    const formatDate = (value: Date) => {
-        return value.toLocaleDateString('en-US', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-        });
-    };
-
-    const formatCurrency = (value: number) => {
-        return value.toLocaleString('en-US', {
-            style: 'currency',
-            currency: 'USD'
-        });
-    };
-
-    const initFilters1 = () => {
-        setFilters1({
-            global: { value: null, matchMode: FilterMatchMode.CONTAINS },
-            name: {
-                operator: FilterOperator.AND,
-                constraints: [{ value: null, matchMode: FilterMatchMode.STARTS_WITH }]
-            },
-            'country.name': {
-                operator: FilterOperator.AND,
-                constraints: [{ value: null, matchMode: FilterMatchMode.STARTS_WITH }]
-            },
-            representative: { value: null, matchMode: FilterMatchMode.IN },
-            date: {
-                operator: FilterOperator.AND,
-                constraints: [{ value: null, matchMode: FilterMatchMode.DATE_IS }]
-            },
-            balance: {
-                operator: FilterOperator.AND,
-                constraints: [{ value: null, matchMode: FilterMatchMode.EQUALS }]
-            },
-            status: {
-                operator: FilterOperator.OR,
-                constraints: [{ value: null, matchMode: FilterMatchMode.EQUALS }]
-            },
-            activity: { value: null, matchMode: FilterMatchMode.BETWEEN },
-            verified: { value: null, matchMode: FilterMatchMode.EQUALS }
-        });
-        setGlobalFilterValue1('');
-    };
-
-    const countryBodyTemplate = (rowData: Demo.Customer) => {
-        return (
-            <React.Fragment>
-                <img alt="flag" src={`/demo/images/flag/flag_placeholder.png`} className={`flag flag-${rowData.country.code}`} width={30} />
-                <span style={{ marginLeft: '.5em', verticalAlign: 'middle' }}>{rowData.country.name}</span>
-            </React.Fragment>
-        );
-    };
-
-    const filterClearTemplate = (options: ColumnFilterClearTemplateOptions) => {
-        return <Button type="button" icon="pi pi-times" onClick={options.filterClearCallback} severity="secondary"></Button>;
-    };
-
-    const filterApplyTemplate = (options: ColumnFilterApplyTemplateOptions) => {
-        return <Button type="button" icon="pi pi-check" onClick={options.filterApplyCallback} severity="success"></Button>;
-    };
-
-    const representativeBodyTemplate = (rowData: Demo.Customer) => {
-        const representative = rowData.representative;
-        return (
-            <React.Fragment>
-                <img
-                    alt={representative.name}
-                    src={`/demo/images/avatar/${representative.image}`}
-                    onError={(e) => ((e.target as HTMLImageElement).src = 'https://www.primefaces.org/wp-content/uploads/2020/05/placeholder.png')}
-                    width={32}
-                    style={{ verticalAlign: 'middle' }}
-                />
-                <span style={{ marginLeft: '.5em', verticalAlign: 'middle' }}>{representative.name}</span>
-            </React.Fragment>
-        );
-    };
-
-    const representativeFilterTemplate = (options: ColumnFilterElementTemplateOptions) => {
-        return (
-            <>
-                <div className="mb-3 text-bold">Agent Picker</div>
-                <MultiSelect value={options.value} options={representatives} itemTemplate={representativesItemTemplate} onChange={(e) => options.filterCallback(e.value)} optionLabel="name" placeholder="Any" className="p-column-filter" />
-            </>
-        );
-    };
-
-    const representativesItemTemplate = (option: any) => {
-        return (
-            <div className="p-multiselect-representative-option">
-                <img alt={option.name} src={`/demo/images/avatar/${option.image}`} width={32} style={{ verticalAlign: 'middle' }} />
-                <span style={{ marginLeft: '.5em', verticalAlign: 'middle' }}>{option.name}</span>
-            </div>
-        );
-    };
-
-    const dateBodyTemplate = (rowData: Demo.Customer) => {
-        return formatDate(rowData.date);
-    };
-
-    const dateFilterTemplate = (options: ColumnFilterElementTemplateOptions) => {
-        return <Calendar value={options.value} onChange={(e) => options.filterCallback(e.value, options.index)} dateFormat="mm/dd/yy" placeholder="mm/dd/yyyy" mask="99/99/9999" />;
-    };
-
-    const balanceBodyTemplate = (rowData: Demo.Customer) => {
-        return formatCurrency(rowData.balance as number);
-    };
-
-    const balanceFilterTemplate = (options: ColumnFilterElementTemplateOptions) => {
-        return <InputNumber value={options.value} onChange={(e) => options.filterCallback(e.value, options.index)} mode="currency" currency="USD" locale="en-US" />;
-    };
-
-    const statusBodyTemplate = (rowData: Demo.Customer) => {
-        return <span className={`customer-badge status-${rowData.status}`}>{rowData.status}</span>;
-    };
-
-    const statusFilterTemplate = (options: ColumnFilterElementTemplateOptions) => {
-        return <Dropdown value={options.value} options={statuses} onChange={(e) => options.filterCallback(e.value, options.index)} itemTemplate={statusItemTemplate} placeholder="Select a Status" className="p-column-filter" showClear />;
-    };
-
-    const statusItemTemplate = (option: any) => {
-        return <span className={`customer-badge status-${option}`}>{option}</span>;
-    };
-
-    const activityBodyTemplate = (rowData: Demo.Customer) => {
-        return <ProgressBar value={rowData.activity} showValue={false} style={{ height: '.5rem' }}></ProgressBar>;
-    };
-
-    const activityFilterTemplate = (options: ColumnFilterElementTemplateOptions) => {
-        return (
-            <React.Fragment>
-                <Slider value={options.value} onChange={(e) => options.filterCallback(e.value)} range className="m-3"></Slider>
-                <div className="flex align-items-center justify-content-between px-2">
-                    <span>{options.value ? options.value[0] : 0}</span>
-                    <span>{options.value ? options.value[1] : 100}</span>
-                </div>
-            </React.Fragment>
-        );
-    };
-
-    const verifiedBodyTemplate = (rowData: Demo.Customer) => {
-        return (
-            <i
-                className={classNames('pi', {
-                    'text-green-500 pi-check-circle': rowData.verified,
-                    'text-pink-500 pi-times-circle': !rowData.verified
-                })}
-            ></i>
-        );
-    };
-
-    const verifiedFilterTemplate = (options: ColumnFilterElementTemplateOptions) => {
-        return <TriStateCheckbox value={options.value} onChange={(e) => options.filterCallback(e.value)} />;
-    };
-
-    const toggleAll = () => {
-        if (allExpanded) collapseAll();
-        else expandAll();
-    };
-
-    const expandAll = () => {
-        let _expandedRows = {} as { [key: string]: boolean };
-        products.forEach((p) => (_expandedRows[`${p.id}`] = true));
-
-        setExpandedRows(_expandedRows);
-        setAllExpanded(true);
-    };
-
-    const collapseAll = () => {
-        setExpandedRows([]);
-        setAllExpanded(false);
-    };
-
-    const amountBodyTemplate = (rowData: Demo.Customer) => {
-        return formatCurrency(rowData.amount as number);
-    };
-
-    const statusOrderBodyTemplate = (rowData: Demo.Customer) => {
-        return <span className={`order-badge order-${rowData.status?.toLowerCase()}`}>{rowData.status}</span>;
-    };
-
-    const searchBodyTemplate = () => {
-        return <Button icon="pi pi-search" />;
-    };
-
-    const imageBodyTemplate = (rowData: Demo.Product) => {
-        return <img src={`/demo/images/product/${rowData.image}`} onError={(e) => ((e.target as HTMLImageElement).src = 'https://www.primefaces.org/wp-content/uploads/2020/05/placeholder.png')} alt={rowData.image} className="shadow-2" width={100} />;
-    };
-
-    const priceBodyTemplate = (rowData: Demo.Product) => {
-        return formatCurrency(rowData.price as number);
-    };
-
-    const ratingBodyTemplate = (rowData: Demo.Product) => {
-        return <Rating value={rowData.rating} readOnly cancel={false} />;
-    };
-
-    const statusBodyTemplate2 = (rowData: Demo.Product) => {
-        return <span className={`product-badge status-${rowData.inventoryStatus?.toLowerCase()}`}>{rowData.inventoryStatus}</span>;
-    };
-
-    const rowExpansionTemplate = (data: Demo.Product) => {
-        return (
-            <div className="orders-subtable">
-                <h5>Orders for {data.name}</h5>
-                <DataTable value={data.orders} responsiveLayout="scroll">
-                    <Column field="id" header="Id" sortable></Column>
-                    <Column field="customer" header="Customer" sortable></Column>
-                    <Column field="date" header="Date" sortable></Column>
-                    <Column field="amount" header="Amount" body={amountBodyTemplate} sortable></Column>
-                    <Column field="status" header="Status" body={statusOrderBodyTemplate} sortable></Column>
-                    <Column headerStyle={{ width: '4rem' }} body={searchBodyTemplate}></Column>
-                </DataTable>
-            </div>
-        );
-    };
-
-    const header = <Button icon={allExpanded ? 'pi pi-minus' : 'pi pi-plus'} label={allExpanded ? 'Collapse All' : 'Expand All'} onClick={toggleAll} className="w-11rem" />;
-
-    const headerTemplate = (data: Demo.Customer) => {
-        return (
-            <React.Fragment>
-                <img alt={data.representative.name} src={`/demo/images/avatar/${data.representative.image}`} width="32" style={{ verticalAlign: 'middle' }} />
-                <span className="font-bold ml-2">{data.representative.name}</span>
-            </React.Fragment>
-        );
-    };
-
-    const footerTemplate = (data: Demo.Customer) => {
-        return (
-            <React.Fragment>
-                <td colSpan={4} style={{ textAlign: 'right' }} className="text-bold pr-6">
-                    Total Customers
-                </td>
-                <td>{calculateCustomerTotal(data.representative.name)}</td>
-            </React.Fragment>
-        );
-    };
-
-    const calculateCustomerTotal = (name: string) => {
-        let total = 0;
-
-        if (customers3) {
-            for (let customer of customers3) {
-                if (customer.representative.name === name) {
-                    total++;
-                }
-            }
+    const teclasEdicion = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            guardar();
+        } else if (e.key === 'Escape') {
+            cancelar();
         }
-
-        return total;
     };
 
-    const header1 = renderHeader1();
+    //Plantillas de columnas 
+    const enEdicion = (p: Producto) => editandoId === p.id && borrador !== null;
 
+    const nombreBody = (p: Producto) =>
+        enEdicion(p) ? <InputText className="w-full" value={borrador!.nombre} onChange={(e) => setBorrador({ ...borrador!, nombre: e.target.value })} onKeyDown={teclasEdicion} autoFocus /> : <span className="font-medium">{p.nombre}</span>;
+
+    const precioBody = (p: Producto) =>
+        enEdicion(p) ? (
+            <InputNumber value={borrador!.precio} onValueChange={(e) => setBorrador({ ...borrador!, precio: e.value ?? 0 })} mode="currency" currency="MXN" locale="es-MX" min={0.01} inputStyle={{ width: '9rem' }} onKeyDown={teclasEdicion} />
+        ) : (
+            moneda(p.precio)
+        );
+
+    const cantidadBody = (p: Producto) =>
+        enEdicion(p) ? <InputNumber value={borrador!.cantidad} onValueChange={(e) => setBorrador({ ...borrador!, cantidad: e.value ?? 0 })} min={1} maxFractionDigits={2} inputStyle={{ width: '5rem', textAlign: 'center' }} onKeyDown={teclasEdicion} /> : p.cantidad;
+
+    // Precio P. = cantidad × precio unitario 
+    const totalFilaBody = (p: Producto) => <span className="font-semibold">{moneda(enEdicion(p) ? borrador!.cantidad * borrador!.precio : p.cantidad * p.precio)}</span>;
+
+    const accionesBody = (p: Producto) =>
+        enEdicion(p) ? (
+            <div className="flex gap-2">
+                <Button type="button" icon="pi pi-check" severity="success" size="small" tooltip="Guardar" onClick={guardar} />
+                <Button type="button" icon="pi pi-times" severity="secondary" size="small" tooltip="Cancelar" onClick={cancelar} />
+            </div>
+        ) : (
+            <div className="flex gap-2">
+                <Button type="button" icon="pi pi-pencil" severity="success" size="small" tooltip="Editar" onClick={() => editar(p)} />
+                <Button type="button" icon="pi pi-trash" severity="danger" size="small" tooltip="Eliminar" onClick={() => eliminar(p.id)} />
+            </div>
+        );
+
+    //
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Filter Menu</h5>
-                    <DataTable
-                        value={customers1}
-                        paginator
-                        className="p-datatable-gridlines"
-                        showGridlines
-                        rows={10}
-                        dataKey="id"
-                        filters={filters1}
-                        filterDisplay="menu"
-                        loading={loading1}
-                        responsiveLayout="scroll"
-                        emptyMessage="No customers found."
-                        header={header1}
-                    >
-                        <Column field="name" header="Name" filter filterPlaceholder="Search by name" style={{ minWidth: '12rem' }} />
-                        <Column header="Country" filterField="country.name" style={{ minWidth: '12rem' }} body={countryBodyTemplate} filter filterPlaceholder="Search by country" filterClear={filterClearTemplate} filterApply={filterApplyTemplate} />
-                        <Column
-                            header="Agent"
-                            filterField="representative"
-                            showFilterMatchModes={false}
-                            filterMenuStyle={{ width: '14rem' }}
-                            style={{ minWidth: '14rem' }}
-                            body={representativeBodyTemplate}
-                            filter
-                            filterElement={representativeFilterTemplate}
-                        />
-                        <Column header="Date" filterField="date" dataType="date" style={{ minWidth: '10rem' }} body={dateBodyTemplate} filter filterElement={dateFilterTemplate} />
-                        <Column header="Balance" filterField="balance" dataType="numeric" style={{ minWidth: '10rem' }} body={balanceBodyTemplate} filter filterElement={balanceFilterTemplate} />
-                        <Column field="status" header="Status" filterMenuStyle={{ width: '14rem' }} style={{ minWidth: '12rem' }} body={statusBodyTemplate} filter filterElement={statusFilterTemplate} />
-                        <Column field="activity" header="Activity" showFilterMatchModes={false} style={{ minWidth: '12rem' }} body={activityBodyTemplate} filter filterElement={activityFilterTemplate} />
-                        <Column field="verified" header="Verified" dataType="boolean" bodyClassName="text-center" style={{ minWidth: '8rem' }} body={verifiedBodyTemplate} filter filterElement={verifiedFilterTemplate} />
-                    </DataTable>
+        <div className="card">
+            <h5>PUNTO DE VENTA (POS)</h5>
+
+            {/* Formulario de registro */}
+            <form onSubmit={registrar} className="surface-50 border-1 surface-border border-round p-3 mb-3 flex flex-column md:flex-row gap-2 align-items-stretch md:align-items-center">
+                <InputText ref={nombreRef} className="flex-grow-1" style={{ flex: 3 }} placeholder="Nombre del producto..." value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="off" />
+                <InputNumber className="flex-grow-1" style={{ flex: 1.5 }} placeholder="Cant" value={cantidad} onValueChange={(e) => setCantidad(e.value ?? null)} min={1} maxFractionDigits={2} />
+                <InputNumber className="flex-grow-1" style={{ flex: 1.5 }} placeholder="$ Precio U." value={precio} onValueChange={(e) => setPrecio(e.value ?? null)} mode="currency" currency="MXN" locale="es-MX" min={0.01} />
+                <Button type="submit" label="Registrar" icon="pi pi-plus" severity="success" disabled={!nombre.trim() || !cantidad || !precio} />
+            </form>
+
+            {/* Tabla de productos */}
+            <DataTable value={productos} dataKey="id" paginator rows={5} rowsPerPageOptions={[5, 10, 25]} showGridlines size="small" emptyMessage="Aún no hay productos registrados." currentPageReportTemplate="Visualizando {first} a {last} de {totalRecords} productos" paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown">
+                <Column header="Cns" style={{ width: '4rem' }} body={(_p, opts) => opts.rowIndex + 1} />
+                <Column header="Nombre del Producto" body={nombreBody} />
+                <Column header="Precio U." body={precioBody} />
+                <Column header="Cant." body={cantidadBody} style={{ width: '7rem' }} bodyClassName="text-center" />
+                <Column header="Precio P." body={totalFilaBody} />
+                <Column header="Acciones" body={accionesBody} style={{ width: '8rem' }} />
+            </DataTable>
+
+            {/* Totales */}
+            <div className="surface-50 border-1 surface-border border-round p-3 mt-3 flex flex-wrap justify-content-end align-items-center gap-3">
+                <div className="flex align-items-center gap-2">
+                    <label htmlFor="subtotal">Subtotal:</label>
+                    <InputText id="subtotal" readOnly value={moneda(subtotal)} style={{ width: '9rem' }} />
                 </div>
-            </div>
-
-            <div className="col-12">
-                <div className="card">
-                    <h5>Frozen Columns</h5>
-                    <ToggleButton checked={idFrozen} onChange={(e) => setIdFrozen(e.value)} onIcon="pi pi-lock" offIcon="pi pi-lock-open" onLabel="Unfreeze Id" offLabel="Freeze Id" style={{ width: '10rem' }} />
-
-                    <DataTable value={customers2} scrollable scrollHeight="400px" loading={loading2} className="mt-3">
-                        <Column field="name" header="Name" style={{ flexGrow: 1, flexBasis: '160px' }} frozen className="font-bold"></Column>
-                        <Column field="id" header="Id" style={{ flexGrow: 1, flexBasis: '100px' }} frozen={idFrozen} alignFrozen="left" bodyClassName={classNames({ 'font-bold': idFrozen })}></Column>
-                        <Column field="country.name" header="Country" style={{ flexGrow: 1, flexBasis: '200px' }} body={countryBodyTemplate}></Column>
-                        <Column field="date" header="Date" style={{ flexGrow: 1, flexBasis: '200px' }} body={dateBodyTemplate}></Column>
-                        <Column field="company" header="Company" style={{ flexGrow: 1, flexBasis: '200px' }}></Column>
-                        <Column field="status" header="Status" style={{ flexGrow: 1, flexBasis: '200px' }} body={statusBodyTemplate}></Column>
-                        <Column field="activity" header="Activity" style={{ flexGrow: 1, flexBasis: '200px' }}></Column>
-                        <Column field="representative.name" header="Representative" style={{ flexGrow: 1, flexBasis: '200px' }} body={representativeBodyTemplate}></Column>
-                        <Column field="balance" header="Balance" body={balanceTemplate} frozen style={{ flexGrow: 1, flexBasis: '120px' }} className="font-bold" alignFrozen="right"></Column>
-                    </DataTable>
+                <div className="flex align-items-center gap-2">
+                    <label htmlFor="iva">IVA ({IVA * 100}%):</label>
+                    <InputText id="iva" readOnly value={moneda(iva)} style={{ width: '8rem' }} />
                 </div>
-            </div>
-
-            <div className="col-12">
-                <div className="card">
-                    <h5>Row Expand</h5>
-                    <DataTable value={products} expandedRows={expandedRows} onRowToggle={(e) => setExpandedRows(e.data)} responsiveLayout="scroll" rowExpansionTemplate={rowExpansionTemplate} dataKey="id" header={header}>
-                        <Column expander style={{ width: '3em' }} />
-                        <Column field="name" header="Name" sortable />
-                        <Column header="Image" body={imageBodyTemplate} />
-                        <Column field="price" header="Price" sortable body={priceBodyTemplate} />
-                        <Column field="category" header="Category" sortable />
-                        <Column field="rating" header="Reviews" sortable body={ratingBodyTemplate} />
-                        <Column field="inventoryStatus" header="Status" sortable body={statusBodyTemplate2} />
-                    </DataTable>
-                </div>
-            </div>
-
-            <div className="col-12">
-                <div className="card">
-                    <h5>Subheader Grouping</h5>
-                    <DataTable
-                        value={customers3}
-                        rowGroupMode="subheader"
-                        groupRowsBy="representative.name"
-                        sortMode="single"
-                        sortField="representative.name"
-                        sortOrder={1}
-                        scrollable
-                        scrollHeight="400px"
-                        rowGroupHeaderTemplate={headerTemplate}
-                        rowGroupFooterTemplate={footerTemplate}
-                        responsiveLayout="scroll"
-                    >
-                        <Column field="name" header="Name" style={{ minWidth: '200px' }}></Column>
-                        <Column field="country" header="Country" body={countryBodyTemplate} style={{ minWidth: '200px' }}></Column>
-                        <Column field="company" header="Company" style={{ minWidth: '200px' }}></Column>
-                        <Column field="status" header="Status" body={statusBodyTemplate} style={{ minWidth: '200px' }}></Column>
-                        <Column field="date" header="Date" style={{ minWidth: '200px' }}></Column>
-                    </DataTable>
+                <div className="flex align-items-center gap-2">
+                    <label htmlFor="total" className="font-bold">
+                        Total:
+                    </label>
+                    <InputText id="total" readOnly value={moneda(total)} className="font-bold" style={{ width: '9rem' }} />
                 </div>
             </div>
         </div>
     );
 };
 
-export default TableDemo;
+export default PuntoDeVenta;
